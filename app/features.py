@@ -616,6 +616,18 @@ def extract(b: FileIn):
     return {"text": t[:20000], "truncated": len(t) > 20000}
 
 
+@r.post("/extract-guidelines")
+def extract_guidelines_endpoint(b: FileIn):
+    from .ingest import extract_text, extract_guidelines
+    try:
+        raw_bytes = base64.b64decode(b.data_b64.split(",")[-1])
+        text = extract_text(b.filename, raw_bytes)
+        rules = extract_guidelines(text)
+    except Exception as e:
+        raise HTTPException(422, f"Could not parse document: {str(e)}")
+    return {"ok": True, "filename": b.filename, "extracted": rules, "sample_text": text[:1000]}
+
+
 @r.get("/disclosure")
 def disclosure(brand_id: str):
     with Session() as s:

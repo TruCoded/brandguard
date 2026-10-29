@@ -24,7 +24,7 @@ function Building({ stop, active }) {
 }
 
 export default function Island() {
-  const { api, brand, brandInfo } = useApp();
+  const { api, brand, brandInfo, isLoggedIn } = useApp();
   const router = useRouter();
   const [o, setO] = useState(null);
   const [activeId, setActiveId] = useState("brand");
@@ -46,9 +46,15 @@ export default function Island() {
     { id: "campaign", name: "Campaign Plaza", short: "Comments and DMs", note: "Approved replies for known questions, handoff for everything else, with pause and test mode.", icon: "megaphone", color: "#6754d9", x: 51, y: 76, size: "medium", motion: "sway", stat: "Replies and leads", href: "/engagement" },
     { id: "insights", name: "Insights", short: "Repeat mistakes", note: "See repeated mistakes and which rules people dismiss so often they are probably unclear.", icon: "chart", color: "#5caab1", x: 35, y: 71, size: "small", motion: "tilt", stat: "Guideline health", href: "/insights" },
     { id: "treasury", name: "The Pier", short: "Publishing and time saved", note: "Re-checked, approved posts are scheduled here. Dry run by default, with a pause switch.", icon: "coins", color: "#eeb143", x: 89, y: 79, size: "small", motion: "pulse", stat: hrs, href: "/publish" },
-  ], [o]);
+  ], [o, k, st, hrs]);
   const active = stops.find(s => s.id === activeId) || stops[0];
-  const go = href => router.push(href);
+  const go = href => {
+    if (!isLoggedIn) {
+      router.push("/login");
+    } else {
+      router.push(href);
+    }
+  };
   return (<main className={`app${frozen ? " is-frozen" : ""}`} style={{ background: "transparent" }}>
     <section className="hero">
       <div className="hero__wash" />

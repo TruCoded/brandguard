@@ -54,8 +54,10 @@ label.chk{display:flex;gap:8px;align-items:center;font-weight:500}
 .swatch{display:inline-block;width:18px;height:18px;border-radius:6px;border:1px solid #cfc7ea;vertical-align:middle;margin-right:4px}
 #toast{position:fixed;right:18px;bottom:18px;background:#171533;color:#fff;padding:10px 16px;border-radius:12px;opacity:0;transform:translateY(10px);transition:.2s;pointer-events:none;max-width:420px;z-index:90}
 #toast.show{opacity:1;transform:none}
-.secnav{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 20px;position:sticky;top:72px;z-index:20;background:rgba(250,249,255,.9);backdrop-filter:blur(10px);padding:8px 0}
-.secnav a{padding:5px 12px;border-radius:99px;background:#fff;border:1px solid var(--line);color:var(--mute);text-decoration:none;font-size:13px}.secnav a:hover{color:var(--pri);border-color:var(--pri)}
+.secnav{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 24px;position:sticky;top:80px;z-index:25;background:rgba(255,255,255,0.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);padding:10px 16px;border-radius:14px;border:1px solid rgba(109,74,212,0.15);box-shadow:0 4px 16px rgba(109,74,212,0.06)}
+.secnav a{padding:6px 14px;border-radius:99px;background:#fff;border:1px solid var(--line);color:var(--mute);text-decoration:none;font-size:13px;font-weight:600;transition:all 0.15s ease}
+.secnav a:hover{color:#fff;background:var(--pri);border-color:var(--pri);transform:translateY(-1px);box-shadow:0 3px 8px rgba(109,74,212,0.25)}
+[id]{scroll-margin-top:140px}
 .savebar{position:sticky;bottom:12px;display:flex;gap:10px;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--pri);border-radius:16px;padding:10px 16px;box-shadow:0 14px 34px rgba(94,55,204,.2);margin-top:20px;z-index:30}
 .edtable input,.edtable select{padding:5px 8px;font-size:13px;min-width:70px}.edtable td{padding:5px 4px}
 .pipe{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}.pipe div{border:1px solid var(--line);background:#fff;border-radius:14px;padding:10px 6px;text-align:center}.pipe b{display:block;font:800 22px var(--f-head)}.pipe span{font-size:12.5px;color:var(--mute)}

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from .deps import user_dep, need, brand_cfg, get_setting, set_setting
+from .deps import user_dep, need, brand_cfg, get_setting, set_setting, create_token
 from .features import r as features_router
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -54,6 +54,45 @@ def seed():
 seed()
 
 
+
+
+# ---------------- Auth endpoints (JWT)
+class LoginRequest(BaseModel):
+    username: str
+    password: str = ""
+
+
+@app.post("/api/auth/login")
+def auth_login(req: LoginRequest):
+    uid = req.username.strip().lower()
+    with Session() as s:
+        # Match user by id or name
+        u = s.get(User, uid)
+        if not u:
+            u = s.scalar(select(User).where(func.lower(User.name).contains(uid)))
+        if not u:
+            # If creating demo or logging in freshly:
+            role = "creator"
+            name = req.username.strip().capitalize()
+            if "admin" in uid:
+                role = "admin"
+            elif "manage" in uid or "lead" in uid:
+                role = "manager"
+            elif "review" in uid or "legal" in uid:
+                role = "reviewer"
+            u = User(id=uid, name=name, role=role, team="General")
+            s.add(u)
+            s.commit()
+            s.refresh(u)
+
+        user_info = {"id": u.id, "name": u.name, "role": u.role, "team": u.team}
+        token = create_token(user_info)
+        return {"ok": True, "token": token, "user": user_info}
+
+
+@app.get("/api/auth/me")
+def auth_me(user=Depends(user_dep)):
+    return {"ok": True, "user": user}
 
 
 # ---------------- Reference data

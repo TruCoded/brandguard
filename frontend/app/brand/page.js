@@ -19,6 +19,65 @@ export default function BrandHQ() {
     setO(await api(`/overview?brand_id=${brand}`));
   }, [api, brand]);
   useEffect(() => { load().catch(() => {}); }, [load]);
+  const [extracting, setExtracting] = useState(false);
+  const [extractedData, setExtractedData] = useState(null);
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setExtracting(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const res = await api("/extract-guidelines", {
+          filename: file.name,
+          data_b64: reader.result
+        });
+        if (res.ok && res.extracted) {
+          setExtractedData(res.extracted);
+          say(`Extracted guidelines from ${file.name}`);
+        }
+      } catch (err) {
+        say(err.message || "Failed to extract guidelines");
+      } finally {
+        setExtracting(false);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const applyExtracted = () => {
+    if (!extractedData) return;
+    setCfg(c => {
+      const next = { ...c };
+      if (extractedData.tagline) next.tagline = extractedData.tagline;
+      if (extractedData.palette?.length) next.palette = [...new Set([...next.palette, ...extractedData.palette])];
+      if (extractedData.fonts?.length) next.fonts = [...new Set([...next.fonts, ...extractedData.fonts])];
+      if (extractedData.hashtags?.length) next.hashtags = [...new Set([...(next.hashtags || []), ...extractedData.hashtags])];
+      if (extractedData.acronyms?.length) next.acronyms = [...new Set([...(next.acronyms || []), ...extractedData.acronyms])];
+      if (extractedData.terms && Object.keys(extractedData.terms).length) {
+        next.terms = { ...(next.terms || {}), ...extractedData.terms };
+      }
+      if (extractedData.hype && Object.keys(extractedData.hype).length) {
+        next.hype = { ...(next.hype || {}), ...extractedData.hype };
+      }
+      if (extractedData.claims?.length) {
+        next.claims = [...(next.claims || []), ...extractedData.claims];
+      }
+      if (extractedData.mandatory?.length) {
+        next.mandatory = [...(next.mandatory || []), ...extractedData.mandatory];
+      }
+      if (extractedData.facts?.length) {
+        next.facts = [...(next.facts || []), ...extractedData.facts];
+      }
+      return next;
+    });
+    setDirty(true);
+    setExtractedData(null);
+    say("Extracted rules merged into Brand HQ! Click Save to apply.");
+  };
+
   if (!B || !cfg) return <p className="sub">Loading…</p>;
   const set = (k, v) => { setCfg(c => ({ ...c, [k]: v })); setDirty(true); };
   const setS = (k, v) => set("settings", { ...cfg.settings, [k]: v });
@@ -27,9 +86,90 @@ export default function BrandHQ() {
   const rules = Object.entries(B.rules);
   const k = o?.kpis || {};
   return (<>
-    <span className="crumb">Brand HQ</span>
-    <h1>{meta.name}: brand command centre</h1>
-    <p className="sub">Everything here is specific to this brand and niche. {ro ? "You are viewing in read-only mode. Switch to the Admin user to edit." : "Edit any section, then save once. Every change is versioned in the audit trail."}</p>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
+      <div>
+        <span className="crumb">Brand HQ</span>
+        <h1>{meta.name}: brand command centre</h1>
+        <p className="sub">Everything here is specific to this brand and niche. {ro ? "You are viewing in read-only mode. Switch to the Admin user to edit." : "Edit any section, then save once. Every change is versioned in the audit trail."}</p>
+      </div>
+      <div>
+        <label className="btn" style={{
+          cursor: ro ? "not-allowed" : "pointer",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          background: "linear-gradient(135deg, #47bfae 0%, #1f9d7a 100%)",
+          opacity: ro ? 0.6 : 1
+        }}>
+          <span>📄</span>
+          <span>{extracting ? "Extracting Rules from PDF..." : "Import Rules from PDF / Doc"}</span>
+          <input
+            type="file"
+            accept=".pdf,.docx,.txt"
+            disabled={ro || extracting}
+            style={{ display: "none" }}
+            onChange={handleFileUpload}
+          />
+        </label>
+      </div>
+    </div>
+
+    {extractedData && (
+      <div style={{
+        margin: "18px 0 24px 0",
+        padding: "20px",
+        borderRadius: "16px",
+        background: "#ffffff",
+        border: "2px solid #47bfae",
+        boxShadow: "0 12px 28px rgba(71,191,174,0.15)"
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h3 style={{ margin: 0, color: "#171533", display: "flex", alignItems: "center", gap: 8 }}>
+            <span>✨</span> Extracted Brand Guidelines & Rules
+          </h3>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn" onClick={applyExtracted} style={{ background: "#1f9d7a" }}>
+              Merge & Apply to {meta.name}
+            </button>
+            <button className="btn alt" onClick={() => setExtractedData(null)}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, fontSize: 13 }}>
+          <div style={{ background: "#f9f7ff", padding: 12, borderRadius: 10 }}>
+            <strong>🎨 Colors / Palette:</strong>
+            <div>{extractedData.palette?.length ? extractedData.palette.join(", ") : "None detected"}</div>
+          </div>
+          <div style={{ background: "#f9f7ff", padding: 12, borderRadius: 10 }}>
+            <strong>🔤 Detected Fonts:</strong>
+            <div>{extractedData.fonts?.length ? extractedData.fonts.join(", ") : "None detected"}</div>
+          </div>
+          <div style={{ background: "#f9f7ff", padding: 12, borderRadius: 10 }}>
+            <strong>🚫 Avoid vs Prefer Terms:</strong>
+            <div>
+              {extractedData.terms && Object.keys(extractedData.terms).length
+                ? Object.entries(extractedData.terms).map(([b, g]) => `${b} → ${g}`).join(", ")
+                : "None detected"}
+            </div>
+          </div>
+          <div style={{ background: "#f9f7ff", padding: 12, borderRadius: 10 }}>
+            <strong>⚖️ Unsupported Claims:</strong>
+            <div>{extractedData.claims?.length ? `${extractedData.claims.length} claims found` : "None detected"}</div>
+          </div>
+          <div style={{ background: "#f9f7ff", padding: 12, borderRadius: 10 }}>
+            <strong>📊 Approved Facts:</strong>
+            <div>{extractedData.facts?.length ? `${extractedData.facts.length} facts found` : "None detected"}</div>
+          </div>
+          <div style={{ background: "#f9f7ff", padding: 12, borderRadius: 10 }}>
+            <strong>⚠️ Mandatory Disclaimers:</strong>
+            <div>{extractedData.mandatory?.length ? extractedData.mandatory.map(m => m.text).join("; ") : "None detected"}</div>
+          </div>
+        </div>
+      </div>
+    )}
+
     <nav className="secnav" aria-label="Sections">{[["health", "Health"], ["identity", "Identity"], ["tone", "Tone and terms"], ["claims", "Claims"], ["rules", "Rules"], ["custom", "Custom rules"], ["mandatory", "Mandatory statements"], ["offers", "Offers"], ["playbook", "Niche playbook"], ["thresholds", "Thresholds"], ["ai", "AI and privacy"], ["brands", "Brands"]].map(([id, t]) => <a key={id} href={`#${id}`}>{t}</a>)}</nav>
 
     <div id="health" className="grid g4" style={{ marginBottom: 16 }}>
