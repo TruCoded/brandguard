@@ -1,0 +1,7 @@
+{
+  "name": "brandguard-web",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": { "dev": "next dev -p 3000", "build": "next build", "start": "npx serve out" },
+  "dependencies": { "chart.js": "4.4.3", "next": "14.2.15", "react": "18.3.1", "react-dom": "18.3.1" }
+}
