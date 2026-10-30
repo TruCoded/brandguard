@@ -448,33 +448,142 @@ def sub_get(sid: int, user=Depends(user_dep)):
 
 
 # ---------------- Insights & audit
+
+
 @app.get("/api/insights")
 def insights(brand_id: str):
     with Session() as s:
         cfg_i = brand_cfg(s, brand_id).config
-        ev = s.scalars(select(FindingEvent).where(FindingEvent.brand_id == brand_id)).all()
-        by_rule, by_cat, by_team = {}, {}, {}
-        for e in ev:
-            r = by_rule.setdefault(e.rule_id, {"rule_id": e.rule_id, "title": eng.rule_info(e.rule_id)[2], "shown": 0, "fixed": 0, "dismissed": 0, "reasons": []})
-            r[e.action] += 1
-            if e.action == "dismissed" and e.reason:
-                r["reasons"].append(e.reason)
-            by_cat[e.category] = by_cat.get(e.category, 0) + 1
-            by_team[e.team or "?"] = by_team.get(e.team or "?", 0) + (1 if e.action != "shown" else 0)
-        unclear = []
-        for r in by_rule.values():
-            handled = r["fixed"] + r["dismissed"]
-            rate = r["dismissed"] / handled if handled else 0
-            r["dismissal_rate"] = round(rate, 2)
-            if handled >= 5 and rate >= 0.4:
-                top = max(set(r["reasons"]), key=r["reasons"].count) if r["reasons"] else "no reason given"
-                unclear.append({"rule_id": r["rule_id"], "title": r["title"], "dismissal_rate": round(rate, 2), "n": handled,
-                                "top_reason": top, "advice": "Probably unclear: add an approved example or a clearer wording to this rule instead of blaming creators."})
-        subs = s.scalars(select(Submission).where(Submission.brand_id == brand_id)).all()
-        return {"by_rule": sorted(by_rule.values(), key=lambda r: -(r["fixed"] + r["dismissed"] + r["shown"])), "by_category": by_cat,
-                "by_team": by_team, "unclear_rules": sorted(unclear, key=lambda x: -x["dismissal_rate"]),
-                "pipeline": {k: sum(1 for x in subs if x.status == k) for k in ("draft", "in_review", "escalated", "changes_requested", "approved", "published")}}
 
+        ev = s.scalars(
+            select(FindingEvent).where(
+                FindingEvent.brand_id == brand_id
+            )
+        ).all()
+
+        by_rule = {}
+        by_cat = {}
+        by_team = {}
+
+        for e in ev:
+            r = by_rule.setdefault(
+                e.rule_id,
+                {
+                    "rule_id": e.rule_id,
+                    "title": eng.rule_info(e.rule_id, cfg_i)[2],
+                    "shown": 0,
+                    "fixed": 0,
+                    "dismissed": 0,
+                    "reasons": [],
+                    "reason_counts": {},
+                    "_reason_labels": {}
+                }
+            )
+
+            r[e.action] += 1
+
+            if e.action == "dismissed" and e.reason:
+                reason = " ".join(e.reason.split())
+                normalized = reason.lower()
+
+                r["reason_counts"][normalized] = (
+                    r["reason_counts"].get(normalized, 0) + 1
+                )
+
+                if normalized not in r["_reason_labels"]:
+                    r["_reason_labels"][normalized] = reason
+
+                r["reasons"].append(reason)
+
+            by_cat[e.category] = (
+                by_cat.get(e.category, 0) + 1
+            )
+
+            by_team[e.team or "?"] = (
+                by_team.get(e.team or "?", 0)
+                + (1 if e.action != "shown" else 0)
+            )
+
+        unclear = []
+
+        for r in by_rule.values():
+            total_handled = r["fixed"] + r["dismissed"]
+            dismissed_count = r["dismissed"]
+
+            rate = (
+                dismissed_count / total_handled
+                if total_handled else 0
+            )
+
+            reason_counts = [
+                {
+                    "reason": r["_reason_labels"][key],
+                    "count": count
+                }
+                for key, count in sorted(
+                    r["reason_counts"].items(),
+                    key=lambda item: item[1],
+                    reverse=True
+                )
+            ]
+
+            top_reason = (
+                reason_counts[0]["reason"]
+                if reason_counts else "No reason given"
+            )
+
+            r["dismissal_rate"] = round(rate, 2)
+            r["reason_counts"] = reason_counts
+
+            if total_handled >= 5 and rate >= 0.4:
+                unclear.append({
+                    "rule_id": r["rule_id"],
+                    "title": r["title"],
+                    "dismissal_rate": round(rate, 2),
+                    "dismissed_count": dismissed_count,
+                    "total_handled": total_handled,
+                    "reason_counts": reason_counts,
+                    "top_reason": top_reason,
+                    "advice": (
+                        "This guideline may be unclear. "
+                        "Review repeated dismissal reasons and "
+                        "add clearer wording or approved examples."
+                    )
+                })
+
+            del r["_reason_labels"]
+
+        subs = s.scalars(
+            select(Submission).where(
+                Submission.brand_id == brand_id
+            )
+        ).all()
+
+        return {
+            "by_rule": sorted(
+                by_rule.values(),
+                key=lambda r: -(
+                    r["fixed"] + r["dismissed"] + r["shown"]
+                )
+            ),
+            "by_category": by_cat,
+            "by_team": by_team,
+            "unclear_rules": sorted(
+                unclear,
+                key=lambda x: -x["dismissal_rate"]
+            ),
+            "pipeline": {
+                k: sum(1 for x in subs if x.status == k)
+                for k in (
+                    "draft",
+                    "in_review",
+                    "escalated",
+                    "changes_requested",
+                    "approved",
+                    "published"
+                )
+            }
+        }
 
 @app.get("/api/audit")
 def audit(limit: int = 100):

@@ -86,3 +86,69 @@ def test_search_calendar_and_reels_platforms():
     assert len(c.post("/api/calendar/plan", json={"brand_id": "solarly", "weeks": 1, "per_week": 2}, headers=P).json()) == 2
     for plat in ("instagram", "youtube", "tiktok"):
         assert c.get(f"/api/reels/analysis?brand_id=solarly&platform={plat}").json()["analysis"]["count"] >= 8
+
+
+def test_unclear_guideline_detector_reports_reason_frequencies():
+    import uuid
+    from app.db import Session, FindingEvent
+
+    # Create a fresh brand to avoid interference from demo data
+    name = "Detector Test " + uuid.uuid4().hex[:6]
+
+    brand_response = c.post(
+        "/api/brands",
+        json={
+            "name": name,
+            "niche": "general",
+            "template": ""
+        },
+        headers=A,
+    )
+
+    assert brand_response.status_code == 200
+    brand_id = brand_response.json()["id"]
+    rule_id = "TONE-001"
+
+    # Add 5 events: 3 dismissed and 2 fixed
+    with Session() as s:
+        for i in range(5):
+            s.add(FindingEvent(
+                brand_id=brand_id,
+                rule_id=rule_id,
+                category="tone",
+                action="dismissed" if i < 3 else "fixed",
+                user_id="priya",
+                team="content",
+                reason=(
+                    "Not clear what is allowed"
+                    if i < 2 else
+                    "Unclear instructions"
+                    if i == 2 else ""
+                )
+            ))
+        s.commit()
+
+    # Request insights
+    response = c.get(
+        f"/api/insights?brand_id={brand_id}"
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    # Temporary debugging output
+    print("BY RULE:", data["by_rule"])
+    print("UNCLEAR RULES:", data["unclear_rules"])
+
+    # Find the detected unclear guideline
+    rule = next(
+        r for r in data["unclear_rules"]
+        if r["rule_id"] == rule_id
+    )
+
+    # Verify detector results
+    assert rule["dismissed_count"] == 3
+    assert rule["total_handled"] == 5
+    assert rule["dismissal_rate"] == 0.6
+    assert len(rule["reason_counts"]) == 2
