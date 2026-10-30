@@ -58,3 +58,123 @@ def test_reel_analysis_endpoint():
     from app.main import app
     a = TestClient(app).get("/api/reels/analysis?brand_id=ironpulse").json()
     assert a["analysis"]["count"] >= 8 and a["recommendations"]
+
+def test_individual_correction_is_audited():
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    c = TestClient(app)
+    body = {
+        "brand_id": BRANDS[0]["id"],
+        "text": BAD,
+        "channel": "instagram"
+    }
+
+    review = c.post("/api/review", json=body).json()
+    finding = next(
+        f for f in review["findings"]
+        if f["rule_id"] == "FACT-001"
+    )
+
+    before = c.get("/api/audit").json()["events"]
+    previous_ids = {event["id"] for event in before}
+
+    response = c.post(
+        "/api/apply-fix",
+        json={**body, "finding": finding},
+        headers={"X-User-Id": "priya"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+    audit = c.get("/api/audit").json()
+    assert audit["chain"]["ok"]
+
+    new_events = [
+        event for event in audit["events"]
+        if event["id"] not in previous_ids
+    ]
+
+    assert any(
+        event["action"] == "finding.fixed"
+        and event["target"] == "FACT-001"
+        and event["actor"] == "priya"
+        for event in new_events
+    )
+
+
+def test_bulk_corrections_are_audited():
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    c = TestClient(app)
+    body = {
+        "brand_id": BRANDS[0]["id"],
+        "text": BAD,
+        "channel": "instagram"
+    }
+
+    before = c.get("/api/audit").json()["events"]
+    previous_ids = {event["id"] for event in before}
+
+    response = c.post(
+        "/api/apply-all-safe",
+        json=body,
+        headers={"X-User-Id": "priya"}
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    assert result["applied"]
+
+    audit = c.get("/api/audit").json()
+    assert audit["chain"]["ok"]
+
+    new_events = [
+        event for event in audit["events"]
+        if event["id"] not in previous_ids
+    ]
+
+    bulk_events = [
+        event for event in new_events
+        if event["action"] == "finding.fixed"
+        and event["detail"].get("method") == "apply_all_safe"
+    ]
+
+    assert len(bulk_events) == len(result["applied"])
+
+def test_dismissal_is_audited():
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    c = TestClient(app)
+
+    before = c.get("/api/audit").json()["events"]
+    previous_ids = {event["id"] for event in before}
+
+    response = c.post(
+        "/api/dismiss",
+        json={
+            "brand_id": BRANDS[0]["id"],
+            "rule_id": "TONE-001",
+            "reason": "Reviewed and accepted by the content team."
+        },
+        headers={"X-User-Id": "priya"}
+    )
+
+    assert response.status_code == 200
+
+    audit = c.get("/api/audit").json()
+    assert audit["chain"]["ok"]
+
+    new_events = [
+        event for event in audit["events"]
+        if event["id"] not in previous_ids
+    ]
+
+    assert any(
+        event["action"] == "finding.dismissed"
+        and event["actor"] == "priya"
+        for event in new_events
+    )

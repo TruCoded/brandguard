@@ -211,14 +211,36 @@ class FixIn(ReviewIn):
     finding: dict
 
 
+
+    
 @app.post("/api/apply-fix")
 def apply_fix(b: FixIn, user=Depends(user_dep)):
     with Session() as s:
         cfg = brand_cfg(s, b.brand_id).config
         r = eng.apply_fix(b.text, b.finding, cfg, **ctx(b))
+
         if r["ok"]:
-            s.add(FindingEvent(brand_id=b.brand_id, rule_id=b.finding["rule_id"], category=b.finding["category"], action="fixed", user_id=user["id"], team=user["team"]))
+            rule_id = b.finding["rule_id"]
+            category = b.finding["category"]
+
+            s.add(FindingEvent(
+                brand_id=b.brand_id,
+                rule_id=rule_id,
+                category=category,
+                action="fixed",
+                user_id=user["id"],
+                team=user["team"]
+            ))
+
+            log_audit(
+                s,
+                user["id"],
+                "finding.fixed",
+                rule_id,
+                {"brand_id": b.brand_id}
+            )
             s.commit()
+
     return r
 
 
@@ -227,10 +249,32 @@ def apply_all(b: ReviewIn, user=Depends(user_dep)):
     with Session() as s:
         cfg = brand_cfg(s, b.brand_id).config
         r = eng.apply_all_safe(b.text, cfg, **ctx(b))
+
         for a in r["applied"]:
-            s.add(FindingEvent(brand_id=b.brand_id, rule_id=a["rule_id"], category=eng.rule_info(a["rule_id"], cfg)[0], action="fixed", user_id=user["id"], team=user["team"]))
+            rule_id = a["rule_id"]
+            category = eng.rule_info(rule_id, cfg)[0]
+
+            s.add(FindingEvent(
+                brand_id=b.brand_id,
+                rule_id=rule_id,
+                category=category,
+                action="fixed",
+                user_id=user["id"],
+                team=user["team"]
+            ))
+
+            log_audit(
+                s,
+                user["id"],
+                "finding.fixed",
+                rule_id,
+                {"brand_id": b.brand_id, "method": "apply_all_safe"}
+            )
+
         s.commit()
+
     return r
+
 
 
 @app.post("/api/ai-rewrite")
